@@ -7,7 +7,7 @@ LDFLAGS=-X main.appVersion=$(VERSION)
 LDFLAGS+=-X main.shortSha=$(SHORTSHA)
 
 build:
-	go build -ldflags "$(LDFLAGS)" .
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" .
 
 utils:
 	go get github.com/mitchellh/gox

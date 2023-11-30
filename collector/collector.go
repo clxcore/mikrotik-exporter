@@ -53,6 +53,7 @@ type collector struct {
 	timeout     time.Duration
 	enableTLS   bool
 	insecureTLS bool
+	clients     map[string]*routeros.Client
 }
 
 // WithBGP enables BGP routing metrics
@@ -219,6 +220,7 @@ func NewCollector(cfg *config.Config, opts ...Option) (prometheus.Collector, err
 			newInterfaceCollector(),
 			newResourceCollector(),
 		},
+		clients: make(map[string]*routeros.Client),
 	}
 
 	for _, o := range opts {
@@ -340,7 +342,23 @@ func (c *collector) collectForDevice(d config.Device, ch chan<- prometheus.Metri
 }
 
 func (c *collector) connectAndCollect(d *config.Device, ch chan<- prometheus.Metric) error {
-	cl, err := c.connect(d)
+	var err error
+
+	id := d.Address + ":" + d.Port
+	cl := c.clients[id]
+	if cl != nil {
+		if _, err = cl.Run("/system/identity/print"); err != nil {
+			cl.Close()
+			cl = nil
+			c.clients[id] = nil
+		}
+	}
+
+	if cl == nil {
+		cl, err = c.connect(d)
+		c.clients[id] = cl
+	}
+
 	if err != nil {
 		log.WithFields(log.Fields{
 			"device": d.Name,
@@ -348,7 +366,7 @@ func (c *collector) connectAndCollect(d *config.Device, ch chan<- prometheus.Met
 		}).Error("error dialing device")
 		return err
 	}
-	defer cl.Close()
+	//defer cl.Close()
 
 	for _, co := range c.collectors {
 		ctx := &collectorContext{ch, d, cl}
