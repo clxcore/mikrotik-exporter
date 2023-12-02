@@ -10,6 +10,7 @@ import (
 
 	"fmt"
 	"net/http"
+	"strings"
 
 	"mikrotik-exporter/collector"
 	"mikrotik-exporter/config"
@@ -21,6 +22,7 @@ import (
 
 // single device can be defined via CLI flags, multiple via config file.
 var (
+	targets     = flag.String("targets", "", "target device list")
 	address     = flag.String("address", "", "address of the device to monitor")
 	configFile  = flag.String("config-file", "", "config file to load")
 	device      = flag.String("device", "", "single device to monitor")
@@ -126,21 +128,42 @@ func loadConfigFromFlags() (*config.Config, error) {
 	if *password == "" {
 		*password = os.Getenv("MIKROTIK_PASSWORD")
 	}
-	if *device == "" || *address == "" || *user == "" || *password == "" {
-		return nil, fmt.Errorf("missing required param for single device configuration")
+
+	devices := []config.Device{}
+	if *targets != "" {
+		for _, target := range strings.Split(*targets, ",") {
+			id := strings.Split(target, ":")
+			if len(id) >= 2 {
+				device := config.Device{
+					Name:     id[0],
+					Address:  id[1],
+					Port:     *deviceport,
+					User:     *user,
+					Password: *password,
+				}
+				if len(id) >= 3 && id[3] != "" {
+					device.Port = id[3]
+				}
+				if device.Name != "" && device.Address != "" && device.User != "" && device.Password != "" {
+					devices = append(devices, device)
+				}
+			}
+		}
+	} else if *device != "" && *address != "" && *user != "" && *password != "" {
+		devices = append(devices, config.Device{
+			Name:     *device,
+			Address:  *address,
+			User:     *user,
+			Password: *password,
+			Port:     *deviceport,
+		})
 	}
 
-	return &config.Config{
-		Devices: []config.Device{
-			config.Device{
-				Name:     *device,
-				Address:  *address,
-				User:     *user,
-				Password: *password,
-				Port:     *deviceport,
-			},
-		},
-	}, nil
+	if len(devices) == 0 {
+		return nil, fmt.Errorf("missing required param for device configuration")
+	}
+
+	return &config.Config{Devices: devices}, nil
 }
 
 func startServer() {
