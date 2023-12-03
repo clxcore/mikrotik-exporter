@@ -54,6 +54,7 @@ type collector struct {
 	enableTLS   bool
 	insecureTLS bool
 	clients     map[string]*routeros.Client
+	cMutex      sync.Mutex
 }
 
 // WithBGP enables BGP routing metrics
@@ -341,22 +342,37 @@ func (c *collector) collectForDevice(d config.Device, ch chan<- prometheus.Metri
 	ch <- prometheus.MustNewConstMetric(scrapeSuccessDesc, prometheus.GaugeValue, success, d.Name)
 }
 
+func (c *collector) clientsSet(id string, client *routeros.Client) {
+	c.cMutex.Lock()
+	defer c.cMutex.Unlock()
+
+	c.clients[id] = client
+}
+
+func (c *collector) clientsGet(id string) *routeros.Client {
+	c.cMutex.Lock()
+	defer c.cMutex.Unlock()
+
+	return c.clients[id]
+}
+
 func (c *collector) connectAndCollect(d *config.Device, ch chan<- prometheus.Metric) error {
 	var err error
 
 	id := d.Address + ":" + d.Port
-	cl := c.clients[id]
+	cl := c.clientsGet(id)
+
 	if cl != nil {
 		if _, err = cl.Run("/system/identity/print"); err != nil {
 			cl.Close()
 			cl = nil
-			c.clients[id] = nil
+			c.clientsSet(id, nil)
 		}
 	}
 
 	if cl == nil {
 		cl, err = c.connect(d)
-		c.clients[id] = cl
+		c.clientsSet(id, cl)
 	}
 
 	if err != nil {

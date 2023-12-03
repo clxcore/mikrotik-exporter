@@ -128,6 +128,9 @@ func loadConfigFromFlags() (*config.Config, error) {
 	if *password == "" {
 		*password = os.Getenv("MIKROTIK_PASSWORD")
 	}
+	if *targets == "" {
+		*targets = os.Getenv("MIKROTIK_TARGETS")
+	}
 
 	devices := []config.Device{}
 	if *targets != "" {
